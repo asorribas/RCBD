@@ -140,4 +140,4 @@ optimize_rcbd <- function(t,
   list(best = best, table = cand)
 }
 
-y <- function(x) x
+
