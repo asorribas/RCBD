@@ -331,6 +331,11 @@ shinyServer(function(input, output, session) {
     sliderInput('yRange','Range for response axes',value=c(-val,val),min=-val,max=val)
   })
   
+  output$ScaleyRangeCRD <- renderUI({
+    val <- input$MaxScaleyRangeCRD
+    sliderInput('yRangeCRD','Range for response axes',value=c(-val,val),min=-val,max=val)
+  })
+  
   
   output$PlotMeansRCBD <- renderPlot({
     d <- dataBlocksSim()
@@ -393,9 +398,46 @@ shinyServer(function(input, output, session) {
   output$ScaleTukeyCI <- renderUI({
     val <- input$MaxScaleTukey
     sliderInput('ScaleTukey','Scale for CI',value=c(-val,val),min=-val,max=val,width="100%")
-    
+
   })
-    
+
+  # 
+  # output$plot_emmeans_RCBD <- renderPlot({
+  #   
+  #   datos <- dataBlocksSim() 
+  #   datos <- datos$data %>% as.data.frame()
+  #   
+  #   datos$Treatment <- factor(datos$Treatment)
+  #   datos$Block <- factor(datos$Block)
+  #   
+  #   
+  #   res <- lm(response~Treatment+Block,datos)
+  #   
+  #   if (input$replicates>1) {res <- lm(response~Treatment*Block,datos)}
+  #   tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
+  #   tky1$pair = rownames(tky1)
+  #   #ymin <- (yTukey)[1]
+  #   #ymax <- (yTukey)[2]
+  #   ymin <- input$ScaleTukey[1]
+  #   ymax <- input$ScaleTukey[2]
+  #   
+  #   # Plot pairwise TukeyHSD comparisons and color by significance level
+  #   p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
+  #                                       label=c("p<0.01","p<0.05","Non-Sig")))) +
+  #     geom_hline(yintercept=0, linetype ='dashed') +
+  #     geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
+  #     geom_point(aes(pair, diff),size=2) +
+  #     labs(colour="") +
+  #     ggtitle(('Model = response ~ Block + Treatment')) +
+  #     theme(axis.text = element_text(size = 14),
+  #           axis.title=element_text(size = 16),
+  #           plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
+  #     labs(y="CI for the effect's difference", x="Treatments compared")+
+  #     ylim(ymin,ymax)
+  #   
+  #   p10
+  #   
+  # })
   
   output$plot_emmeans_RCBD <- renderPlot({
     
@@ -405,36 +447,83 @@ shinyServer(function(input, output, session) {
     datos$Treatment <- factor(datos$Treatment)
     datos$Block <- factor(datos$Block)
     
+    res <- lm(response ~ Treatment + Block, datos)
+    if (input$replicates > 1) {
+      res <- lm(response ~ Treatment * Block, datos)
+    }
     
-    res <- lm(response~Treatment+Block,datos)
+    tky1 <- as.data.frame(TukeyHSD(aov(res))$Treatment)
+    tky1$pair <- rownames(tky1)
     
-    if (input$replicates>1) {res <- lm(response~Treatment*Block,datos)}
-    tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
-    tky1$pair = rownames(tky1)
-    #ymin <- (yTukey)[1]
-    #ymax <- (yTukey)[2]
     ymin <- input$ScaleTukey[1]
     ymax <- input$ScaleTukey[2]
     
-    # Plot pairwise TukeyHSD comparisons and color by significance level
-    p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
-                                        label=c("p<0.01","p<0.05","Non-Sig")))) +
-      geom_hline(yintercept=0, linetype ='dashed') +
-      geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
-      geom_point(aes(pair, diff),size=2) +
-      labs(colour="") +
-      ggtitle(('Model = response ~ Block + Treatment')) +
+    # Create significance category
+    tky1$sig_cat <- cut(
+      tky1$`p adj`,
+      breaks = c(0, 0.01, 0.05, 1),
+      labels = c("p < 0.01", "p < 0.05", "Non-Significant"),
+      include.lowest = TRUE
+    )
+    
+    # Custom color mapping
+    sig_colors <- c(
+      "Non-Significant" = "red",
+      "p < 0.01" = "green",
+      "p < 0.05" = "blue"
+    )
+    
+    # Plot
+    p10 <- ggplot(tky1, aes(colour = sig_cat)) +
+      geom_hline(yintercept = 0, linetype = 'dashed') +
+      geom_errorbar(aes(pair, ymin = lwr, ymax = upr), width = 0.2, size = 0.8) +
+      geom_point(aes(pair, diff), size = 2) +
+      scale_colour_manual(values = sig_colors) +
+      labs(colour = "") +
+      ggtitle("Model = response ~ Block + Treatment") +
       theme(axis.text = element_text(size = 14),
-            axis.title=element_text(size = 16),
+            axis.title = element_text(size = 16),
             plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
-      labs(y="CI for the effect's difference", x="Treatments compared")+
-      ylim(ymin,ymax)
+      labs(y = "CI for the effect's difference", 
+           x = "Treatments compared") +
+      ylim(ymin, ymax)
     
     p10
-    
   })
   
   ## Plot pairwise comparison CRD
+  
+  # output$plot_emmeans_CRD <- renderPlot({
+  #   
+  #   datos <- dataBlocksSim()
+  #   datos <- datos$data %>% as.data.frame()
+  #   
+  #   datos$Treatment <- factor(datos$Treatment)
+  #   datos$Block <- factor(datos$Block)
+  #   
+  #   res <- lm(response~Treatment,datos)
+  #   tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
+  #   tky1$pair = rownames(tky1) 
+  #   ymin <- input$ScaleTukey[1]
+  #   ymax <- input$ScaleTukey[2]
+  #   
+  #   # Plot pairwise TukeyHSD comparisons and color by significance level
+  #   p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
+  #                                       label=c("p<0.01","p<0.05","Non-Sig")))) +
+  #     geom_hline(yintercept=0, linetype ='dashed') +
+  #     geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
+  #     geom_point(aes(pair, diff),size=2) +
+  #     labs(colour="") +
+  #     ggtitle(('Model = response ~ treatment')) +
+  #     theme(axis.text = element_text(size = 14),
+  #           axis.title=element_text(size = 16),
+  #           plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
+  #     labs(y="CI for the effect's difference", x="Treatments compared")+
+  #     ylim(ymin,ymax)
+  #   
+  #   p10
+  #   
+  # })
   
   output$plot_emmeans_CRD <- renderPlot({
     
@@ -444,31 +533,44 @@ shinyServer(function(input, output, session) {
     datos$Treatment <- factor(datos$Treatment)
     datos$Block <- factor(datos$Block)
     
-    res <- lm(response~Treatment,datos)
-    tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
-    tky1$pair = rownames(tky1) 
+    res <- lm(response ~ Treatment, datos)
+    tky1 <- as.data.frame(TukeyHSD(aov(res))$Treatment)
+    tky1$pair <- rownames(tky1)
+    
     ymin <- input$ScaleTukey[1]
     ymax <- input$ScaleTukey[2]
     
-    # Plot pairwise TukeyHSD comparisons and color by significance level
-    p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
-                                        label=c("p<0.01","p<0.05","Non-Sig")))) +
-      geom_hline(yintercept=0, linetype ='dashed') +
-      geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
-      geom_point(aes(pair, diff),size=2) +
-      labs(colour="") +
-      ggtitle(('Model = response ~ treatment')) +
+    # Create significance category variable
+    tky1$sig_cat <- cut(
+      tky1$`p adj`,
+      breaks = c(0, 0.01, 0.05, 1),
+      labels = c("p < 0.01", "p < 0.05", "Non-Significant"),
+      include.lowest = TRUE
+    )
+    
+    # Custom colors
+    sig_colors <- c(
+      "Non-Significant" = "red",
+      "p < 0.01" = "green",
+      "p < 0.05" = "blue"
+    )
+    
+    # Plot
+    p10 <- ggplot(tky1, aes(colour = sig_cat)) +
+      geom_hline(yintercept = 0, linetype = "dashed") +
+      geom_errorbar(aes(pair, ymin = lwr, ymax = upr), width = 0.2, size = 0.8) +
+      geom_point(aes(pair, diff), size = 2) +
+      scale_colour_manual(values = sig_colors) +
+      labs(colour = "") +
+      ggtitle("Model = response ~ treatment") +
       theme(axis.text = element_text(size = 14),
-            axis.title=element_text(size = 16),
+            axis.title = element_text(size = 16),
             plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
-      labs(y="CI for the effect's difference", x="Treatments compared")+
-      ylim(ymin,ymax)
+      labs(y = "CI for the effect's difference", x = "Treatments compared") +
+      ylim(ymin, ymax)
     
     p10
-    
   })
-  
-
   ## Curva de potencia para el diseño en bloques 
   
   output$NewCurvePower <- renderPlotly({
