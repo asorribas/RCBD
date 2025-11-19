@@ -401,44 +401,52 @@ shinyServer(function(input, output, session) {
 
   })
 
-  # 
-  # output$plot_emmeans_RCBD <- renderPlot({
-  #   
-  #   datos <- dataBlocksSim() 
-  #   datos <- datos$data %>% as.data.frame()
-  #   
-  #   datos$Treatment <- factor(datos$Treatment)
-  #   datos$Block <- factor(datos$Block)
-  #   
-  #   
-  #   res <- lm(response~Treatment+Block,datos)
-  #   
-  #   if (input$replicates>1) {res <- lm(response~Treatment*Block,datos)}
-  #   tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
-  #   tky1$pair = rownames(tky1)
-  #   #ymin <- (yTukey)[1]
-  #   #ymax <- (yTukey)[2]
-  #   ymin <- input$ScaleTukey[1]
-  #   ymax <- input$ScaleTukey[2]
-  #   
-  #   # Plot pairwise TukeyHSD comparisons and color by significance level
-  #   p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
-  #                                       label=c("p<0.01","p<0.05","Non-Sig")))) +
-  #     geom_hline(yintercept=0, linetype ='dashed') +
-  #     geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
-  #     geom_point(aes(pair, diff),size=2) +
-  #     labs(colour="") +
-  #     ggtitle(('Model = response ~ Block + Treatment')) +
-  #     theme(axis.text = element_text(size = 14),
-  #           axis.title=element_text(size = 16),
-  #           plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
-  #     labs(y="CI for the effect's difference", x="Treatments compared")+
-  #     ylim(ymin,ymax)
-  #   
-  #   p10
-  #   
-  # })
+  ############################### CI of treatment response
   
+  ci_means_rcbd <- function(data, alpha = 0.05) {
+    df <- data
+    fit <- lm(response~trt+block,df)
+    means.RCBD <- emmeans(fit,~trt) %>% as.data.frame
+    fit <- lm(response~trt,df)
+    means.CRD <- emmeans(fit,~trt) %>% as.data.frame
+    
+    means.RCBD <- means.RCBD %>% mutate(model="RCBD")
+    means.CRD <- means.CRD %>% mutate(model="CRD")
+    
+    means <- rbind(means.RCBD,means.CRD)
+    
+    
+    p <- ggplot(means,
+           aes(x = trt,
+               y = emmean,
+               ymin = lower.CL,
+               ymax = upper.CL,
+               
+               color=model)) +
+      geom_pointrange(position = position_dodge(width = 0.4)) +
+      labs(x = "Treatment",
+           y = "Estimated mean response",
+           color = "Analysis",
+           title = "Treatment means with 95% CI: RCBD vs CRD")
+    
+    return(p)
+  }
+  
+  output$plot_treat_CI_RCBD <- renderPlot({
+
+    datos <- dataBlocksSim()
+    datos <- datos$data %>% as.data.frame()
+
+    datos$trt <- factor(datos$Treatment)
+    datos$block <- factor(datos$Block)
+
+    ci_means_rcbd(datos)
+    
+    
+  })
+  
+############## Pairwise comparisons and plots 
+
   output$plot_emmeans_RCBD <- renderPlot({
     
     datos <- dataBlocksSim() 
