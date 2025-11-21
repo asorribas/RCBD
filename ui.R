@@ -1,13 +1,8 @@
 #
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-# Date 04/07/2023
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
+# UI for RCBD
 #
 
-webshot::install_phantomjs(force=TRUE)
+# webshot::install_phantomjs(force=TRUE)
 
 shinyUI(
   #####################
