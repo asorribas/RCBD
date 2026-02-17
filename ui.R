@@ -16,7 +16,7 @@ shinyUI(
                   menuItem("What's a CRD?", icon = icon("circle-question"), tabName = "WhatsCRD"),
                   #menuItem("Linear model", icon = icon("eye"), tabName = "LinearModel"),
                   menuItem("Simulate experiments", icon = icon("computer"), tabName = "Simulate"),
-                  menuItem("Suggested work", icon = icon("book"), tabName = "ExploreCases"),
+                  # menuItem("Suggested work", icon = icon("book"), tabName = "ExploreCases"),
                   menuItem("Contact, code, and publication", icon = icon("book-open-reader"), tabName = "Contact")
                   
                   )),
@@ -564,7 +564,7 @@ shinyUI(
                                                                   column(3,
                                                                          numericInput('num_sim',
                                                                                       withMathJax('Number of simulations'),
-                                                                                      value=2000)),
+                                                                                      value=4000)),
                                                                   column(2,
                                                                          numericInput('binwSimPower',"Binwidth",value=1)),
                                                                   column(2,
@@ -572,7 +572,7 @@ shinyUI(
                                                                                       value=0.2)),
                                                                   column(2,
                                                                          numericInput('ScaleFSim','Max value of F',value=50))),
-                                                                column(12,
+                                                                column(8,
                                                                        h4("Power for RCBD"),
                                                                        hr(),
                                                                        withSpinner(plotOutput("EmpiricalPower_RCBD"), type = 4)

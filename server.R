@@ -125,42 +125,73 @@ shinyServer(function(input, output, session) {
  
   ################ Interactive table for treatment effects
   
-  input_table_T <- reactive({
+  # guarda lo que el usuario ha escrito
+  values_T <- reactiveValues(data = NULL)
+  
+  # 1) Tabla "por defecto" generada por Cohen
+  default_table_from_cohen <- reactive({
+    req(input$treat, input$fCohen, input$sigma)
     
-    #rr <- vals #replicate(input$treat,runif(1,-5,10))
-    rr <- calculate_group_means(f=input$fCohen,sigma=input$sigma,k=input$treat) %>% round(2)
+    rr <- calculate_group_means(
+      f = input$fCohen,
+      sigma = input$sigma,
+      k = input$treat
+    ) %>% round(2)
+    
     mat <- matrix(rr, ncol = input$treat, nrow = 1)
-    res <- c()
-    for (j in 1:input$treat) {res <- c(res,paste("Treat(",j,")",sep=''))}
-    colnames(mat) <- res  
-    
-    res = as.data.frame(mat)
-    res
-    
+    colnames(mat) <- paste0("Treat(", 1:input$treat, ")")
+    as.data.frame(mat)
   })
   
+  # 2) Inicialización / actualización según el modo
+  observeEvent(
+    list(input$ChoiceInputEffects, input$treat, input$fCohen, input$sigma),
+    {
+      if (input$ChoiceInputEffects == "Cohen") {
+        # En modo Cohen, SIEMPRE sincroniza la tabla con el cálculo
+        values_T$data <- default_table_from_cohen()
+      } else {
+        # En modo Manual, NO machaques lo escrito.
+        # Solo inicializa si está vacío o si cambió el número de tratamientos.
+        if (is.null(values_T$data) || ncol(values_T$data) != input$treat) {
+          
+          # Si venías de Cohen, puedes partir de esa tabla (más amigable)
+          values_T$data <- default_table_from_cohen()
+          
+          # Alternativa: empezar con ceros
+          # mat <- matrix(0, nrow = 1, ncol = input$treat)
+          # colnames(mat) <- paste0("Treat(", 1:input$treat, ")")
+          # values_T$data <- as.data.frame(mat)
+        }
+      }
+    },
+    ignoreInit = FALSE
+  )
+  
+  # 3) Render de la tabla (siempre desde values_T$data)
   output$input_table_T <- renderRHandsontable({
-    
-    rhandsontable(input_table_T())
+    req(values_T$data)
+    rhandsontable(values_T$data)
   })
   
-  values_T <- reactiveValues(data=NULL)
-  
-  observe({
-    values_T$data <- hot_to_r(input$input_table_T)
+  # 4) Captura de ediciones SOLO en modo manual
+  observeEvent(input$input_table_T, {
+    if (input$ChoiceInputEffects == "Manual") {
+      values_T$data <- hot_to_r(input$input_table_T)
+    }
   })
-
-    dT1 <- reactive({
+  
+  # 5) Esto es lo que usas en el resto de tu app
+  dT1 <- reactive({
+    req(values_T$data)
     values_T$data
   })
+  
   
  
   #################### Data generation and block effect
     
     
-
-    
-  
     ### Generate data using the parameters of the defined scenario 
     ### and block effects
     
@@ -169,32 +200,16 @@ shinyServer(function(input, output, session) {
     m <- mean
     s <- error
     
-    # nulo  <- runif(blocks, -0.001*m, 0.001*m)
-    # bajo  <- runif(blocks, -.1*m, .1*m)
-    # medio <- runif(blocks, -.5*m, .5*m)
-    # alto  <- runif(blocks, -1*m, 1*m)
-
-
-#    rest_ran <- as.data.frame(cbind(nulo,bajo,medio,alto))
-
     if(op == "Nulo") {
-      # eF1 <- t(dF1())
-      # #eF2 <- t(dF2())
       eBlock <- generate_block_effects(blocks,s,"null")
     }
     else if (op == "Bajo") {
-      # eF1 <- t(dF1())
-      # #eF2 <- t(dF2())
       eBlock <- generate_block_effects(blocks,s,"low")
     }
     else if (op == "Medio") {
-      # eF1 <- t(dF1())
-      # #eF2 <- t(dF2())
       eBlock <- generate_block_effects(blocks,s,"medium")
     }
     else {
-      # eF1 <- t(dF1())
-      # #eF2 <- t(dF2())
       eBlock <- generate_block_effects(blocks,s,"large")
     }
 
@@ -214,8 +229,6 @@ shinyServer(function(input, output, session) {
     n <- k*b*r
     
     ss1 <- error
-    
-    
     
     data <- data %>% mutate(response=mean+eTreatment[Treatment]+eBlock[Block]+rnorm(n,0,ss1))
     data$Treatment <- as.factor(data$Treatment)
@@ -284,8 +297,6 @@ shinyServer(function(input, output, session) {
     }
   )
   
-  
-
   
   ## Table of means RCBD
   
@@ -363,7 +374,6 @@ shinyServer(function(input, output, session) {
   })
   
  
-  
   ## RCBD ANOVA Table
   
   output$ANOVA_RCBD <- output$ANOVA_RCBD_bis <- renderPrint({
@@ -494,39 +504,6 @@ shinyServer(function(input, output, session) {
     p10
   })
   
-  ## Plot pairwise comparison CRD
-  
-  # output$plot_emmeans_CRD <- renderPlot({
-  #   
-  #   datos <- dataBlocksSim()
-  #   datos <- datos$data %>% as.data.frame()
-  #   
-  #   datos$Treatment <- factor(datos$Treatment)
-  #   datos$Block <- factor(datos$Block)
-  #   
-  #   res <- lm(response~Treatment,datos)
-  #   tky1 = as.data.frame(TukeyHSD(aov(res))$Treatment)
-  #   tky1$pair = rownames(tky1) 
-  #   ymin <- input$ScaleTukey[1]
-  #   ymax <- input$ScaleTukey[2]
-  #   
-  #   # Plot pairwise TukeyHSD comparisons and color by significance level
-  #   p10 <-  ggplot(tky1, aes(colour=cut(`p adj`, c(0, 0.01, 0.05, 1), 
-  #                                       label=c("p<0.01","p<0.05","Non-Sig")))) +
-  #     geom_hline(yintercept=0, linetype ='dashed') +
-  #     geom_errorbar(aes(pair, ymin=lwr, ymax=upr), width=0.2,size=0.8) +
-  #     geom_point(aes(pair, diff),size=2) +
-  #     labs(colour="") +
-  #     ggtitle(('Model = response ~ treatment')) +
-  #     theme(axis.text = element_text(size = 14),
-  #           axis.title=element_text(size = 16),
-  #           plot.title = element_text(hjust = 0.5, size = rel(1.5))) +
-  #     labs(y="CI for the effect's difference", x="Treatments compared")+
-  #     ylim(ymin,ymax)
-  #   
-  #   p10
-  #   
-  # })
   
   output$plot_emmeans_CRD <- renderPlot({
     
@@ -574,6 +551,7 @@ shinyServer(function(input, output, session) {
     
     p10
   })
+  
   ## Curva de potencia para el diseño en bloques 
   
   output$NewCurvePower <- renderPlotly({
@@ -662,40 +640,18 @@ shinyServer(function(input, output, session) {
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 22))
     
-    p.CRD <- plot_sim_power()$plot.CRD 
-    power <- plot_sim_power()$power.CRD 
-    
-    powert <- plot_sim_power()$powert.CRD 
-    
-    pp.CRD <- p.CRD + xlim(0,input$ScaleFSim)+
-      ylim(0,input$ScalePowerSim)+
-      xlab("F values observed in the simulations")+
-      ylab("Density")+
-        # geom_vline(xintercept = ua,color="red",linetype="dashed")+
-
-      annotate(geom = "text",x=input$ScaleFSim/2,
-               size=8,y=input$ScalePowerSim-input$ScalePowerSim/10, label = paste("Simulated power: ",round(power,4)))+
-      annotate(geom = "text",x=input$ScaleFSim/2,
-               size=8,y=input$ScalePowerSim, label = paste("Theoretical power: ",powert ))+
-      annotate(geom = "text",x=input$ScaleFSim/2,
-               size=8,y=input$ScalePowerSim-input$ScalePowerSim/5, label = paste("Critical F value: ",round(Ua.CRD,2)))+
-      geom_point(aes(x=Ua.CRD,y=0),size=3,shape=5)+
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 22))
-    
-    ggarrange(pp,pp.CRD)
+    pp
     
   })
   
   
-  ComputeLambda <-  function(b,r,s,tau) {
+  ComputeLambdaRCBD <-  function(b,r,s,tau) {
     d <- sum((tau-mean(tau))^2)
     d/s^2*b*r
   }
   
-  ComputeLambdaCRD <- function(b,r,s) {
-    eblock <- dataBlocksSim()
-    tau <- t(dT1())
+  ComputeLambdaCRD <- function(b,r,s,tau,eblock) {
+    
     t <- length(tau)
     varb <- var(eblock$eBlock)
     s2 <- s^2+varb
@@ -713,7 +669,7 @@ shinyServer(function(input, output, session) {
   }
   
   
-  TablePower <- function(t,s,tau,alfa=0.05) {
+  TablePower <- function(t,s,tau,alfa=0.05,eblock) {
     
     res <- data.frame()
     
@@ -723,7 +679,8 @@ shinyServer(function(input, output, session) {
         df1 <- t-1
         df2 <- t*b*r-t-b+1
         Ua <- qf(1-alfa,df1,df2)
-        lambda <- ComputeLambda(b,r,s,tau)
+        
+        lambda <- ComputeLambdaRCBD(b,r,s,tau)
         res <- rbind(res,data.frame(treatments=t,blocks=b,replicates=r,n=b*r*t,power=1-pf(Ua,df1,df2,lambda)))
       }}
     res
@@ -736,7 +693,8 @@ shinyServer(function(input, output, session) {
     r <- input$replicates
     alfa <- input$alfa
     tau <- t(dT1())
-    lambda <- ComputeLambda(b,r,s,tau)
+    eblock <- dataBlocksSim()
+    lambda <- ComputeLambdaRCBD(b,r,s,tau)
     df1 <- t-1
     df2 <- t*b*r-t-b+1
     Ua <- qf(1-alfa,df1,df2)
@@ -746,25 +704,6 @@ shinyServer(function(input, output, session) {
                   b, " blocks, and ",r," replicates is ", power)
     text
   })
-  
-  # output$ComputeActualPowerNoBlockEffect <- renderUI({
-  #   s <- input$sigma
-  #   t <- input$treat
-  #   b <- input$blocks
-  #   r <- input$replicates
-  #   N <- t*b*r
-  #   tau <- t(dT1())
-  #   d <- sum((tau-mean(tau))^2)
-  #   
-  #   lambda <- d/s^2*b
-  #   df1 <- t-1
-  #   df2 <- N-t
-  #   Ua <- qf(0.95,df1,df2)
-  #   power <- round(1-pf(Ua,df1,df2,lambda),4)
-  #   
-  #   text <- paste("The statistical power if blocks effects are neglected, is ", power)
-  #   text
-  # })
   
   output$ComputeForPower <- renderTable({
     
@@ -784,37 +723,10 @@ shinyServer(function(input, output, session) {
   
   cocienteF <- function(trat_sim,blocks_sim,repli_sim,error_sim,mean){
     
-    # nulo <- runif(blocks_sim, 0, 1)
-    # bajo <- runif(blocks_sim, 1, 10)
-    # medio <- runif(blocks_sim, 20, 50)
-    # alto <- runif(blocks_sim, 60, 120)
-    
-    eBlock <- dataBlocksSim()
+   eBlock <- dataBlocksSim()
     eBlock <- t(eBlock$eBlock)
     eTreatment <- t(dT1())
     
-    # if(input$opcion == "Nulo") {
-    #   eF1 <- t(dF1())
-    #   #eF2 <- t(dF2())
-    #   eF2 <- t(nulo)
-    # }
-    # else if (input$opcion == "Bajo") {
-    #   eF1 <- t(dF1())
-    #   #eF2 <- t(dF2())
-    #   eF2 <- t(bajo)
-    # }
-    # else if (input$opcion == "Medio") {
-    #   eF1 <- t(dF1())
-    #   #eF2 <- t(dF2())
-    #   eF2 <- t(medio)
-    # }
-    # else {
-    #   eF1 <- t(dF1())
-    #   #eF2 <- t(dF2())
-    #   eF2 <- t(alto)
-    # }
-    # 
-
     data <- data.frame(
       Treatment=rep(rep(1:trat_sim,1),blocks_sim),
       Block=rep(rep(1:blocks_sim),trat_sim) %>% sort()
@@ -1209,7 +1121,7 @@ simulation_Designs <- function(num_sim,
   power.CRD <- sum(f.CRD >= ua.CRD )/num_sim %>% round(4)
   
   
-  lambda.CRD = ComputeLambdaCRD(cols,repli,sigma_sim)
+  lambda.CRD = ComputeLambdaCRD(cols,repli,sigma_sim,tau,eblock)
   
   
   powert.CRD  <- pf(ua.CRD,
@@ -1371,63 +1283,53 @@ output$PrecisionTheoretical <- renderUI({
   text
 })
 
-########### Sample size using Cohen f (not yet implemented)
-
-# output$SampleSizeCohen <- renderPrint({
-#   eT <- t(dT1())
-#   m <- mean(eT)
-#   SSB <- sum((eT-m)^2)
-#   sigma <- input$sigma
-#   f <- sqrt((SSB/(input$treat)))/(sigma)
-#   
-#   
-#   
-#   k <- length(eT)
-#   power <- input$powerCohen
-#   res <- pwr.anova.test(k=k,
-#                       f=f,
-#                       sig.level=0.05,
-#                       power=power)
-#   
-#   res
-# })
-
 output$PlotPowerByBlocks <- renderPlotly({
+  req(input$treat, input$NumBlocks, input$sigma, input$alfa, input$replicates)
+  
+  t <- as.integer(input$treat)
+  b <- as.integer(input$NumBlocks)
+  sigma <- as.numeric(input$sigma)
+  alfa <- as.numeric(input$alfa)
+  req(!is.na(sigma), sigma > 0, !is.na(alfa), alfa > 0, alfa < 1)
   
   res <- data.frame()
   resCRD <- data.frame()
-  t <- input$treat
-  b <- input$NumBlocks
+  # t <- input$treat
+  # b <- input$NumBlocks
+  # sigma <- input$sigma
+  # alfa <- input$alfa
   
-  s <- input$sigma
-  alfa <- input$alfa
   despower <- 0.8
   tau <- t(dT1())
   
   #### CRD
+  eblock <- dataBlocksSim()
   for (r in 2:30) {
     
     df1 <- t-1
     df2 <- t*r*b-t
     Ua <- qf(1-alfa,df1,df2)
-    lambda <- ComputeLambdaCRD(b,r,s)
+    lambda <- ComputeLambdaCRD(b,r,sigma,tau,eblock)
+    
     resCRD <- rbind(resCRD,data.frame( replicates=r,lambda=lambda,Ua=Ua,df1=df1,df2=df2,power=1-pf(Ua,df1,df2,lambda)))
   }
   
   #### RCBD
-  for (r in 1:30) {
+  
+  for (r in 2:30) {
     
     df1 <- t-1
     df2 <- t*b*r-t-b+1
     Ua <- qf(1-alfa,df1,df2)
-    lambda <- ComputeLambda(b,r,s,tau)
+    
+    lambda <- ComputeLambdaRCBD(b,r,sigma,tau)
     res <- rbind(res,data.frame(treatments=t,blocks=b,replicates=r,n=b*r*t,power=1-pf(Ua,df1,df2,lambda)))
   }
   
   r <- input$replicates
   df1 <- t-1
   df2 <- t*b*r-t-b+1
-  lambda <- ComputeLambda(b,r,s,tau)
+  lambda <- ComputeLambdaRCBD(b,r,sigma,tau)
   Ua <- qf(1-alfa,df1,df2)
   actual_power <- 1-pf(Ua,df1,df2,lambda)
   
